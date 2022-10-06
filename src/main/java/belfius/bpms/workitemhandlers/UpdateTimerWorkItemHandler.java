@@ -18,25 +18,24 @@ package belfius.bpms.workitemhandlers;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Map;
 
+import org.jbpm.kie.services.impl.admin.TimerInstanceImpl;
+import org.jbpm.process.instance.command.RelativeUpdateTimerCommand;
 import org.jbpm.process.workitem.core.AbstractLogOrThrowWorkItemHandler;
 import org.jbpm.process.workitem.core.util.RequiredParameterValidator;
+import org.jbpm.process.workitem.core.util.Wid;
+import org.jbpm.process.workitem.core.util.WidMavenDepends;
+import org.jbpm.process.workitem.core.util.WidParameter;
+import org.jbpm.process.workitem.core.util.service.WidAction;
+import org.jbpm.process.workitem.core.util.service.WidService;
+import org.jbpm.services.api.admin.ProcessInstanceAdminService;
+import org.jbpm.services.api.admin.TimerInstance;
+import org.jbpm.services.api.service.ServiceRegistry;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.process.WorkItem;
 import org.kie.api.runtime.process.WorkItemManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.jbpm.process.workitem.core.util.Wid;
-import org.jbpm.process.workitem.core.util.WidParameter;
-import org.jbpm.process.workitem.core.util.WidResult;
-import org.jbpm.process.workitem.core.util.service.WidAction;
-import org.jbpm.process.workitem.core.util.service.WidAuth;
-import org.jbpm.process.workitem.core.util.service.WidService;
-import org.jbpm.services.api.admin.ProcessInstanceAdminService;
-import org.jbpm.services.api.admin.TimerInstance;
-import org.jbpm.services.api.service.ServiceRegistry;
-import org.jbpm.process.workitem.core.util.WidMavenDepends;
 
 @Wid(widfile="UpdateTimerDefinitions.wid", name="UpdateTimer",
         displayName="UpdateTimer",
@@ -71,69 +70,46 @@ public class UpdateTimerWorkItemHandler extends AbstractLogOrThrowWorkItemHandle
         try {
             RequiredParameterValidator.validate(this.getClass(), workItem);
 
-            // sample parameters
             String timerId = (String) workItem.getParameter("timerId");
+            String timerName = (String) workItem.getParameter("timerName");
             String timerDelay = (String) workItem.getParameter("timerDelay");
             String timerDelayFromCurrentDate = (String) workItem.getParameter("timerDelayFromCurrentDate");
             
-//            org.jbpm.process.instance.InternalProcessRuntime processRuntime = ksession.getKieRuntime(org.jbpm.process.instance.InternalProcessRuntime.class);
-//            org.jbpm.process.instance.timer.TimerManager timerManager = processRuntime.getTimerManager();
-//			int timerCnt = timerManager.getTimers().size();
-//			logger.info("    found " + timerCnt + " active timer(s)");
-//			for (org.jbpm.process.instance.timer.TimerInstance ti: timerManager.getTimers()) {
-//			  logger.info("Timer found: " + ti.getName() + " - " + ti.getTimerId());
-//			}  
-			
+            long timerIdLv = Long.valueOf(timerId).longValue();
+            long timerDelayLv = Long.valueOf(timerDelay).longValue();
+            long timerDelayFromCurrentDateLv = Long.valueOf(timerDelayFromCurrentDate).longValue();			
 			
 			ProcessInstanceAdminService processAdminService = (ProcessInstanceAdminService) ServiceRegistry.get().service(ServiceRegistry.PROCESS_ADMIN_SERVICE);
 			Collection<TimerInstance> timerList = processAdminService.getTimerInstances(workItem.getProcessInstanceId());
 			
-			logger.info("*********** BEFORE TIMER UPDATE Iterating over timer instances ****************");
-			for (Iterator iterator = timerList.iterator(); iterator.hasNext();) {
-				TimerInstance timerInstance = (TimerInstance) iterator.next();
-				logger.info("TimerInstance found with id={}, timer-id={} and name={}", timerInstance.getId(), timerInstance.getTimerId(), timerInstance.getTimerName());
-				logger.info("TimerInstance expiration date is {}", timerInstance.getNextFireTime());
-				
+			for (Iterator<TimerInstance> iterator = timerList.iterator(); iterator.hasNext();) {
+				TimerInstanceImpl timerInstance = (TimerInstanceImpl) iterator.next();
+				logger.debug("TimerInstance found with id={}, timer-id={} and name={}", timerInstance.getId(), timerInstance.getTimerId(), timerInstance.getTimerName());
+				logger.debug("TimerInstance expiration date is {}", timerInstance.getNextFireTime());
 			}
-			logger.info("*********** BEFORE TIMER UPDATE Ending iteration over timer instances ****************");
 			
 			if(timerDelay != null && !timerDelay.isEmpty()) {
-				logger.info("About to delay {} seconds timer with id {} ", Long.valueOf(timerDelay), Long.valueOf(timerId));
-				processAdminService.updateTimer(workItem.getProcessInstanceId(), Long.valueOf(timerId), Long.valueOf(timerDelay), 0, 0);
+				logger.info("About to delay {} milliseconds the timer with id {} from ProcessInstance {}",
+						timerDelayLv, timerIdLv, workItem.getProcessInstanceId());
+				
+				ksession.execute(new RelativeUpdateTimerCommand(workItem.getProcessInstanceId(), timerIdLv, timerDelayLv));
 			}
 			else if(timerDelayFromCurrentDate != null && !timerDelayFromCurrentDate.isEmpty()) {
-				logger.info("About to delay {} seconds timer with id {} ", Long.valueOf(timerDelayFromCurrentDate), Long.valueOf(timerId));
-				processAdminService.updateTimerRelative(workItem.getProcessInstanceId(), Long.valueOf(timerId), Long.valueOf(timerDelayFromCurrentDate), 0, 0);
+				logger.info("About to relative delay {} milliseconds the timer with id {} from ProcessInstance {}",
+						timerDelayFromCurrentDateLv, timerIdLv, workItem.getProcessInstanceId());
+
+				ksession.execute(new RelativeUpdateTimerCommand(workItem.getProcessInstanceId(), timerIdLv, timerDelayFromCurrentDateLv));
 			}
 			
-			logger.info("Timer with id {} delayed", Long.valueOf(timerId));
-			
-			timerList = processAdminService.getTimerInstances(workItem.getProcessInstanceId());
-			
-			logger.info("*********** AFTER TIMER UPDATE Iterating over timer instances ****************");
-			for (Iterator iterator = timerList.iterator(); iterator.hasNext();) {
-				TimerInstance timerInstance = (TimerInstance) iterator.next();
-				logger.info("TimerInstance found with id={}, timer-id={} and name={}", timerInstance.getId(), timerInstance.getTimerId(), timerInstance.getTimerName());
-				logger.info("TimerInstance expiration date is {}", timerInstance.getNextFireTime());
-				
-			}
-			logger.info("*********** AFTER TIMER UPDATE Ending iteration over timer instances ****************");
-            
-            
-            Map<String, Object> results = new HashMap<String, Object>();
+			logger.info("Timer with id {} delayed", timerIdLv);
 
-
-            manager.completeWorkItem(workItem.getId(), results);
+            manager.completeWorkItem(workItem.getId(), new HashMap<String, Object>());
         } catch(Throwable cause) {
             handleException(cause);
         }
     }
 
     @Override
-    public void abortWorkItem(WorkItem workItem,
-                              WorkItemManager manager) {
-        // stub
+    public void abortWorkItem(WorkItem workItem, WorkItemManager manager) {
     }
 }
-
-
